@@ -1,82 +1,104 @@
-package dev.contramap.playground
+package dev.contramap
 
-
+import Stream._
 import scala.annotation.tailrec
-import Program._
 
-sealed trait Program[+A] { self =>
-  def flatMap[B](f: A => Program[B]): Program[B] =
-    Program.FlatMap(self, f)
+sealed trait Stream[+A] { self =>
 
-  def inspect(f: String => String): String =
+  // final def flatMap[B](f: A => Stream[B]): Stream[B] =
+  //   FlatMap(self, f)
+
+  def flatMap[B](f: A => Stream[B]): Stream[B] =
     self match {
-      case Return(value)       => f(s"Return($value)")
-      case FlatMap(program, _) => program.inspect(s => f(s"FlatMap($s)"))
-      case z: Zip[a, b]        => f(s"Zip(${z.left.inspect(f)}, ${z.right.inspect(f)})")
+      case FlatMap(a, g) => FlatMap(a, (x: Any) => g(x) flatMap f)
+      case x             => FlatMap(x, f)
     }
 
-  def map[B](f: A => B): Program[B] =
-    flatMap(a => Program.Return(f(a)))
+  final def map[B](f: A => B): Stream[B] =
+    flatMap(a => Done(f(a)))
 
-  def tap(f: A => Unit): Program[A] =
+  final def run: A =
+    resume match {
+      case Left(k)  => k().run
+      case Right(v) => v
+    }
+
+  final def resume: Either[() => Stream[A], A] =
+    self match {
+      case Done(v)             => Right(v)
+      case More(k)             => Left(k)
+      case FlatMap(Done(v), f) => f(v).resume
+      case FlatMap(More(k), f) => Left(() => FlatMap(k(), f))
+      case FlatMap(FlatMap(b, g), f) =>
+        FlatMap(b, (x: Any) => FlatMap(g(x), f)).resume
+    }
+
+  final def tap(f: A => Unit): Stream[A] =
     map { a => f(a); a }
-
-  def zip[B](that: Program[B]): Program[(A, B)] =
-    Program.Zip(self, that)
 }
 
-object Program {
-  case class Return[A](value: A)                                    extends Program[A]
-  case class FlatMap[A, B](program: Program[A], f: A => Program[B]) extends Program[B]
-  case class Zip[A, B](left: Program[A], right: Program[B])         extends Program[(A, B)]
-
-  def pure[A](a: A): Program[A] =
-    Return(a)
-
-  // def run[A](program: Program[A]): A =
-  //   optimize(program) match {
-  //     case Return(value)             => value
-  //     case FlatMap(Return(value), f) => run(f(value))
-  //     case Zip(left, right)          => run(left.flatMap(l0 => right.map((l0, _))))
-  //     case unreachable               => throw new AssertionError(s"Unreachable: $unreachable")
-  //   }
+object Stream {
+  case class More[+A](k: () => Stream[A]) extends Stream[A]
+  case class Done[+A](result: A) extends Stream[A]
+  case class FlatMap[A, +B](stream: Stream[A], f: A => Stream[B])
+      extends Stream[B]
 
   @tailrec
-  def optimize[A](program: Program[A]): Program[A] =
-    program match {
-      case z: Zip[a, b]                 =>
-        optimize(
-          for {
-            a <- z.left
-            b <- z.right
-          } yield (a, b): A
-        )
+  def run2[A0](s: Stream[A0]): A0 =
+    resume2(s) match {
+      case Left(k)  => run2(k())
+      case Right(v) => v
+    }
 
-      // case FlatMap(Return(value), f)    => optimize(f(value))
-      case FlatMap(FlatMap(p0, f0), f1) => optimize(FlatMap(p0, f0.andThen(FlatMap(_, f1))))
-      case FlatMap(Zip(left, right), f) =>
-        optimize(
-          for {
-            l <- left
-            r <- right
-            z <- f((l, r))
-          } yield z
-        )
-      case x                            => x
+  @tailrec
+  def resume2[A0](s: Stream[A0]): Either[() => Stream[A0], A0] =
+    s match {
+      case Done(v)             => Right(v)
+      case More(k)             => Left(k)
+      case FlatMap(Done(v), f) => resume2(f(v))
+      case FlatMap(More(k), f) => Left(() => k().flatMap(f))
+      case FlatMap(FlatMap(b, g), f) => resume2(b.flatMap(x  => g(x).flatMap(f)))
     }
 }
 
-object Example extends App {
-  import Program._
+object StreamExample extends App {
 
-  val p1 = pure(42).map(_ + 1).zip(Return("ABC"))
-  val p2 = pure(56).map(_ - 1).map(_ - 1).flatMap(_ => p1).zip(Return("DEF"))
-  //println(run(p1.zip(p2)))
+  /*
+    Flatmap(
+      Done(100000),
+      n0 => FlatMap(
+        Done(99999),
+        n0 => FlatMap(
+          Done(99998),
+          ...
+        )
+      )
+    )
 
-  def loop(i: Int): Program[Int] = pure(i).tap(println).flatMap(i => if (i == 0) pure(i) else loop(i - 1))
+    Flatmap(Flatmap(Done(100000), tap), n0 => ...)
+                    |----^-----|  |^|   |---^---|
+                         b         g         f
+    => FlatMap(Done(10000), (x: Any) => tap(x).flatMap(f)).resume
 
-  println(p1.zip(p2).inspect(identity))
-  println(optimize(p1.zip(p2)).inspect(identity))
+    case FlatMap(Done(v), f) => f(v).resume
+    => FlatMap(Done(10000), f).resume
 
-  //run(loop(100000))
+    case FlatMap(Done(v), f) => f(v).resume
+    => FlatMap(FlatMap(Done(99999), tap), f).resume
+
+    Flatmap(Flatmap(Done(100000), tap), n0 => ...)
+
+    case FlatMap(FlatMap(b, g), f) =>
+        FlatMap(b, (x: Any) => FlatMap(g(x), f)).resume
+   */
+
+  def loop(n: Int): Stream[Int] =
+    Done(n).tap(println).flatMap(n0 => if (n0 == 0) Done(n0) else loop(n - 1))
+
+  val stream = loop(100000)
+  //println(stream)
+  // /stream.run
+  //run2(stream)
+  // stream.test()
+  // stream.run
 }

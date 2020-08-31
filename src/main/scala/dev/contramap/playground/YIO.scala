@@ -61,11 +61,11 @@ object YIO {
     }
 }
 /*For those who attended yesterday's session about JDG's article, I went a bit further and had some fun with a tail-recursive interpreter for a data-structure representing a program in general:*/
-object Example extends App {
-  def loop: YIO[Unit] = YIO.Return(42).tap(println).flatMap(_ => loop)
+// object Example extends App {
+//   def loop: YIO[Unit] = YIO.Return(42).tap(println).flatMap(_ => loop)
 
-  YIO.run(loop)
-}
+//   YIO.run(loop)
+// }
 
 sealed trait YIO2[-R, +A] { self =>
   def map[B](f: A => B): YIO2[R, B] =
