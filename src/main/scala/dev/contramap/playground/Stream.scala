@@ -48,18 +48,18 @@ sealed trait Chunk0[+A] { self =>
     loop(acc, self)
   }
 
-  def zip[B, C](that: Chunk[B]): Chunk[C] = 
-    zipWith(that)((_, _))
+  // def zip[B, C](that: Chunk[B]): Chunk[C] = 
+  //   zipWith(that)((_, _))
 
-  def zipWith[B, C](that: Chunk[B])(f: (A, B) => C): Chunk[C] = 
-    (self, that) match {
-      case (_, Empty) => Empty
-      case (Empty, _) => Empty
-      case (Cons(a, tail0), Cons(b, tail1)) => Cons(
-        f(a, b), 
-        tail0.zipWith(tail1)
-      )
-    }
+  // def zipWith[B, C](that: Chunk[B])(f: (A, B) => C): Chunk[C] = 
+  //   (self, that) match {
+  //     case (_, Empty) => Empty
+  //     case (Empty, _) => Empty
+  //     case (Cons(a, tail0), Cons(b, tail1)) => Cons(
+  //       f(a, b), 
+  //       tail0.zipWith(tail1)
+  //     )
+  //   }
     
 }
 object Chunk0 {
@@ -94,18 +94,18 @@ sealed trait Chunk[+A] { self =>
     loop(acc, self)
   }
 
-  def zip[B, C](that: Chunk[B]): Chunk[C] = 
-    zipWith(that)((_, _))
+  // def zip[B, C](that: Chunk[B]): Chunk[C] = 
+  //   zipWith(that)((_, _))
 
-  def zipWith[B, C](that: Chunk[B])(f: (A, B) => C): Chunk[C] = 
-    (self, that) match {
-      case (_, Empty) => Empty
-      case (Empty, _) => Empty
-      case (Cons(value0, tail0), Cons(value1, tail1)) => Cons(
-        () => f(value0(), value1()), 
-        () => tail0().zipWith(tail1())
-      )
-    }
+  // def zipWith[B, C](that: Chunk[B])(f: (A, B) => C): Chunk[C] = 
+  //   (self, that) match {
+  //     case (_, Empty) => Empty
+  //     case (Empty, _) => Empty
+  //     case (Cons(value0, tail0), Cons(value1, tail1)) => Cons(
+  //       () => f(value0(), value1()), 
+  //       () => tail0().zipWith(tail1())
+  //     )
+  //   }
     
 }
 object Chunk {
@@ -377,3 +377,39 @@ object Stream {
 //   // stream.test()
 //   // stream.run
 // }
+
+
+sealed trait Expr[A, B] {
+  // def ~(f: Expr[A, B]): Expr[A, B] = ???
+}
+
+object Expr {
+  case class Field[A, B](column: B) extends Expr[A, B]
+}
+
+object Foo {
+
+  case class Term[A, B](f: Expr.Field[A, B])
+
+  def insert[A, B](t: Term[A, B]): Term[A, B] = ???
+  def select[A, B](t: Expr[A, B]): Expr[A, B] = ???
+
+  implicit class InsertExpr[A, B](field: Expr[A, B]) {
+    def ~(f: Expr[A, B]): Expr[A, B] = ???
+  }
+
+  implicit class Insert[A, B](field: Expr.Field[A, B]) {
+    def ~(f: Expr.Field[A, B]): Term[A, B] = ???
+  }
+
+  val f0: Expr.Field[Int, String] = Expr.Field("42")
+  val f1: Expr[Int, String] = Expr.Field("42")
+
+  // select(f0 ~ f0: Expr      ).into(table).values(...)
+  // insert(f0 ~ f0: Expr.Field).from(table).where(...)
+  // iterate over the fields and build the terms? Maybe two separate issues
+
+
+  select(f1 ~ f1)
+  insert(f0 ~ f0)
+}
